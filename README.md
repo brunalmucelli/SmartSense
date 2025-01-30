@@ -34,10 +34,22 @@ Este projeto consiste em um sistema de monitoramento de dados climáticos, prove
 
 O sistema está dividido em dois  arquivos:
 
+### data_collector.py
+Esse código é  responsável por coletar dados meteorológicos e publicá-los em um broker MQTT. Ele utiliza a API OpenWeather para obter informações como temperatura, umidade e velocidade do vento de uma cidade específica (por padrão, Belo Horizonte). Esses dados são organizados em formato JSON e publicados periodicamente em tópicos MQTT.
+
+O funcionamento do código se dá em três etapas principais. Primeiro, ele configura a conexão com o broker MQTT e define uma lista de sensores, cada um com um identificador único, um tipo de dado e uma função de coleta que faz chamadas à API OpenWeather. Em seguida, ao iniciar o coletor de dados, o programa estabelece a conexão com o broker e inicia um loop contínuo onde publica periodicamente uma mensagem inicial contendo a lista de sensores e, logo depois, coleta os dados de cada sensor e os publica nos tópicos MQTT correspondentes. O processo se repete em intervalos configuráveis, nesso caso igual a 60 segundos.
+
+Além disso, o código possui uma função específica para obter os dados da API OpenWeather, enviando uma requisição HTTP à API e extraindo as informações relevantes do JSON retornado. Caso a requisição falhe, um erro é impresso no console.
+
 ### data_processor.py
 
+O DataProcessor é responsável por receber, processar e armazenar os dados coletados pelos sensores, garantindo a persistência das informações no banco de dados PostgreSQL. Ele se conecta a um broker MQTT, onde escuta mensagens publicadas pelos sensores e processa as informações recebidas.
 
-### data_collector.py
+Ao receber uma mensagem de um sensor, o DataProcessor extrai os dados, incluindo o ID da máquina, o ID do sensor, o timestamp e o valor da leitura. Esses dados são então armazenados na tabela sensor_metrics, permitindo um registro histórico das medições.
+
+Além disso, o sistema implementa um mecanismo de monitoramento de alarmes. Para sensores de temperatura, umidade e vento, o DataProcessor verifica se os valores ultrapassam limites críticos e gera alarmes quando necessário, registrando-os na tabela alarms. Ele também monitora a frequência das mensagens enviadas pelos sensores, identificando sensores inativos e registrando um alarme caso um sensor não reporte dados por mais de 10 minutos.
+
+O programa opera continuamente, garantindo que os sensores estejam ativos e que os dados sejam armazenados de forma confiável, contribuindo para um sistema robusto de monitoramento.
 
 ## Banco de Dados
 
