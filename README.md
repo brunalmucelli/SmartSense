@@ -90,11 +90,43 @@ Para definir a geração de alarmes, alguns critérios foram utilizados e basead
 | Variação de temperatura >10°C em 1h  | temp_variation  |
 | Sensor inativo por 10 min            | inactive        |
 
-## Dashboard
-
-
 ## Como rodar o projeto
 
+O primeiro passo é iniciar o MQTT Broker, com o comando:
 
-## Conclusão
+```
+mosquitto -v
+```
 
+Após isso, em terminais diferentes, roda-se os arquivos data_processor.py e data_collector.py, com os comandos: 
+
+```
+python data_processor.py
+```
+
+```
+python data_collector.py
+```
+
+Desse modo, o projeto já estará funcionando e o mqtt broker realizando corretamente a comunicação entre os módulos.
+
+## Dashboard
+
+Visando facilitar a visualização dos dados adquiridos, criou-se um dashboard usando a ferramenta Metabase. Para rodar esse dashboard basta rodar o seguinte comando no diretório de instalação do Metabase e acessar a página em http://localhost:3000/ .
+
+```
+java -jar metabase.jar  
+```
+O dashboard foi construído usando querys em SQL, como exemplo abaixo tem-se a query utilizada para realizar a média móvel de temperatura nas últimas 24 horas.
+```
+SELECT
+    DATE_TRUNC('hour', time) AS hora,  -- Agrupa por hora corretamente
+    AVG(value) AS media_temperatura
+FROM sensor_metrics
+WHERE 
+    sensor_id = 'temp_01'  -- Filtra apenas o sensor de temperatura
+    AND time >= NOW() - INTERVAL '24 hours'  -- Considera as últimas 24 horas
+GROUP BY hora
+ORDER BY hora;
+```
+Além disso, os recursos visuais disponibilizados pela plataforma foram amplamente explorados, de modo a facilitar a análise e interpretação por parte do usuário.
