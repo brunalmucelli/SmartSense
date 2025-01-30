@@ -81,7 +81,6 @@ class DataProcessor:
                 machine_id = data["machine_id"]
                 sensors = data["sensors"]
                 print(f"Informações recebidas de sensores: {sensors}")
-                # Opcional: Persistir informações gerais sobre os sensores no banco de dados, se necessário
                 return
 
             # Verifica se o tópico tem o formato esperado para dados de sensores
@@ -101,16 +100,17 @@ class DataProcessor:
 
             # Atualizar o último horário visto do sensor
             self.sensors_last_seen[(machine_id, sensor_id)] = datetime.utcnow()
+            
+             # Gerar alarmes com base nos valores
+            self.check_alarms(machine_id, sensor_id, value, timestamp)
         except Exception as e:
             print(f"Erro ao processar mensagem: {e}")
    
-
     def check_inactive_sensors(self):
         """Verifica sensores inativos e gera alarmes."""
         now = datetime.utcnow()
         for (machine_id, sensor_id), last_seen in self.sensors_last_seen.items():
-            # Considerar inativo após 10 períodos (exemplo: 10 segundos * 10 períodos)
-            inactivity_threshold = 10 * 10
+            inactivity_threshold = 600  # 10 minutos (600 segundos)
             if (now - last_seen).total_seconds() > inactivity_threshold:
                 self.persist_alarm(
                     machine_id,
@@ -118,6 +118,45 @@ class DataProcessor:
                     "inactive",
                     f"Sensor {sensor_id} está inativo há mais de {inactivity_threshold} segundos."
                 )
+
+    def check_alarms(self, machine_id, sensor_id, value, timestamp):
+        """Verifica condições para disparar alarmes com base nos valores dos sensores."""
+        if sensor_id == "temp_01":  # Sensor de temperatura
+            if value > 35:
+                self.persist_alarm(machine_id, sensor_id, "heat_alert", "Temperatura acima de 35°C - Alerta de calor extremo")
+            elif value <5:
+                self.persist_alarm(machine_id, sensor_id, "cold_alert", "Temperatura abaixo de 5°C - Alerta de frio intenso")
+
+            # Verificação de variação rápida de temperatura
+            conn = self.connect_db()
+            if conn:
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute("""
+                            SELECT value, time FROM sensor_metrics
+                            WHERE sensor_id = %s AND time >= %s - INTERVAL '1 hour'
+                            ORDER BY time DESC LIMIT 1
+                        """, (sensor_id, timestamp))
+                        result = cursor.fetchone()
+                        if result:
+                            last_value, last_time = result
+                            if abs(value - last_value) > 10:
+                                self.persist_alarm(machine_id, sensor_id, "temp_variation", "Mudança brusca na temperatura (>10°C em 1 hora)")
+                except psycopg2.Error as e:
+                    print(f"Erro ao verificar variação de temperatura: {e}")
+                finally:
+                    conn.close()
+
+        if sensor_id == "hum_01":  # Sensor de umidade
+            if value < 20:
+                self.persist_alarm(machine_id, sensor_id, "dry_alert", "Umidade abaixo de 20% - Alerta de seca")
+            elif value > 90:
+                self.persist_alarm(machine_id, sensor_id, "humidity_alert", "Umidade acima de 90% - Alerta de alta umidade")
+
+        if sensor_id == "wind_01":  # Sensor de velocidade do vento
+            if value > 10:
+                self.persist_alarm(machine_id, sensor_id, "wind_alert", "Velocidade do vento acima de 10 m/s - Alerta de vento forte")
+
 
     def start(self):
         """Inicia o processador de dados."""
@@ -130,7 +169,7 @@ class DataProcessor:
         try:
             while True:
                 self.check_inactive_sensors()
-                time.sleep(10)  # Verificar sensores inativos a cada 10 segundos
+                time.sleep(60)  # Verificar sensores inativos a cada 60 segundos
         except KeyboardInterrupt:
             print("Encerrando o DataProcessor...")
             self.client.loop_stop()
